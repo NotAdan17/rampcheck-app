@@ -29,4 +29,21 @@ class LocalDb {
       },
     );
   }
+
+  // -------------------------------
+  // JOB DATABASE FUNCTIONS
+  // -------------------------------
+
+  static Future<int> insertJob(Map<String, dynamic> job) async {
+    final db = await database;
+    return await db.insert('jobs', job);
+  }
+
+  static Future<List<Map<String, dynamic>>> getJobs() async {
+    final db = await database;
+    return await db.query(
+      'jobs',
+      orderBy: 'createdAt DESC',
+    );
+  }
 }
