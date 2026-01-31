@@ -32,7 +32,16 @@ class _JobListScreenState extends State<JobListScreen> {
       createdAt: DateTime.now(),
     );
 
-    await LocalDb.insertJob(job.toMap());
+    final newId = await LocalDb.insertJob(job.toMap());
+
+    // Queue the change for later sync to POST /sync/jobs
+    await LocalDb.enqueueSyncItem(
+      entityType: 'job',
+      entityId: newId,
+      action: 'CREATE',
+      payload: job.toMap().toString(), // simple placeholder; we’ll switch to JSON next
+    );
+
     await _loadJobs();
   }
 
