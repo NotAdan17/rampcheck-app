@@ -10,15 +10,16 @@ class SyncService {
   static String get baseUrl {
     // Android emulator -> host machine
     if (Platform.isAndroid) return 'http://10.0.2.2:5001';
-    // Windows desktop / host
+    // Windows desktop / host machine
     return 'http://127.0.0.1:5001';
   }
 
   static Future<SyncResult> syncNow() async {
+    final start = DateTime.now();
     final queue = await LocalDb.getSyncQueue();
 
     if (queue.isEmpty) {
-      return const SyncResult(ok: true, message: 'Nothing to sync');
+      return const SyncResult(ok: true, message: 'Nothing to sync', durationMs: 0);
     }
 
     final payload = {
@@ -34,24 +35,28 @@ class SyncService {
     };
 
     try {
-      final uri = Uri.parse('${baseUrl}${syncPath}');
+      final uri = Uri.parse('$baseUrl$syncPath');
       final res = await http.post(
         uri,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(payload),
       );
 
+      final duration = DateTime.now().difference(start).inMilliseconds;
+
       if (res.statusCode >= 200 && res.statusCode < 300) {
         await LocalDb.clearSyncQueue();
-        return const SyncResult(ok: true, message: 'Sync complete');
+        return SyncResult(ok: true, message: 'Sync complete', durationMs: duration);
       }
 
       return SyncResult(
         ok: false,
-        message: 'Sync failed: HTTP ${res.statusCode} - ${res.body}',
+        message: 'Sync failed: HTTP ${res.statusCode} ${res.body}',
+        durationMs: duration,
       );
     } catch (e) {
-      return SyncResult(ok: false, message: 'Sync failed: $e');
+      final duration = DateTime.now().difference(start).inMilliseconds;
+      return SyncResult(ok: false, message: 'Sync failed: $e', durationMs: duration);
     }
   }
 }
@@ -59,5 +64,6 @@ class SyncService {
 class SyncResult {
   final bool ok;
   final String message;
-  const SyncResult({required this.ok, required this.message});
+  final int durationMs;
+  const SyncResult({required this.ok, required this.message, required this.durationMs});
 }
