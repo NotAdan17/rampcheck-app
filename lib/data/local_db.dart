@@ -16,14 +16,15 @@ class LocalDb {
 
     return await openDatabase(
       path,
-      version: 2, // <-- bumped version so new tables get created via onUpgrade
+      version: 3, // v3 adds updatedAt column + supports edits
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             aircraftReg TEXT NOT NULL,
             status TEXT NOT NULL,
-            createdAt TEXT NOT NULL
+            createdAt TEXT NOT NULL,
+            updatedAt TEXT NOT NULL
           )
         ''');
 
@@ -39,7 +40,7 @@ class LocalDb {
         ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        // If upgrading from v1 -> v2, add the sync_queue table
+        // v1/v2 -> v2: ensure sync_queue exists
         if (oldVersion < 2) {
           await db.execute('''
             CREATE TABLE IF NOT EXISTS sync_queue (
@@ -51,6 +52,13 @@ class LocalDb {
               createdAt TEXT NOT NULL
             )
           ''');
+        }
+
+        // v2 -> v3: add updatedAt column
+        if (oldVersion < 3) {
+          await db.execute('ALTER TABLE jobs ADD COLUMN updatedAt TEXT');
+          // Backfill for existing rows
+          await db.execute("UPDATE jobs SET updatedAt = createdAt WHERE updatedAt IS NULL");
         }
       },
     );
@@ -69,7 +77,26 @@ class LocalDb {
     final db = await database;
     return await db.query(
       'jobs',
-      orderBy: 'createdAt DESC',
+      orderBy: 'updatedAt DESC',
+    );
+  }
+
+  static Future<int> updateJob(int id, Map<String, dynamic> job) async {
+    final db = await database;
+    return await db.update(
+      'jobs',
+      job,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  static Future<int> deleteJob(int id) async {
+    final db = await database;
+    return await db.delete(
+      'jobs',
+      where: 'id = ?',
+      whereArgs: [id],
     );
   }
 
@@ -99,6 +126,12 @@ class LocalDb {
       'sync_queue',
       orderBy: 'createdAt ASC',
     );
+  }
+
+  static Future<int> getSyncQueueCount() async {
+    final db = await database;
+    final rows = await db.rawQuery('SELECT COUNT(*) as c FROM sync_queue');
+    return (rows.first['c'] as int?) ?? 0;
   }
 
   static Future<int> clearSyncQueue() async {
